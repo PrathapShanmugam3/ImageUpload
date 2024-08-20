@@ -1,13 +1,6 @@
 const express = require('express');
-const bodyparser = require('body-parser');
+const bodyParser = require('body-parser');
 const cors = require('cors');
-
-app.use((req, res, next) => {
-    res.header("Access-Control-Allow-Origin", "*"); // Allow all origins
-    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-    next();
-});
-
 const mysql = require('mysql2');
 const multer = require('multer');
 
@@ -15,7 +8,8 @@ const app = express();
 const port = 10000;
 
 app.use(cors());
-app.use(bodyparser.json())
+app.use(bodyParser.json());
+
 const storage = multer.memoryStorage(); 
 const upload = multer({ storage: storage });
 
@@ -23,7 +17,7 @@ const db = mysql.createConnection({
     host: "datacode-brinkc-0f04.k.aivencloud.com",
     user: "avnadmin",
     password: "AVNS_LW-VAXMR2lhfn-4QiyF",
-    database:"defaultdb",
+    database: "defaultdb",
     port: 22335
 });
 
@@ -61,6 +55,7 @@ const createDatabaseAndTables = () => {
 };
 
 app.post('/upload', upload.single('image'), async (req, res) => {
+    try {
         const { product_name, content, price, category } = req.body;
         const imageBuffer = req.file.buffer;
 
@@ -69,7 +64,7 @@ app.post('/upload', upload.single('image'), async (req, res) => {
         }
 
         // Check if the table exists, and create it if not
-        const tableExistsQuery = `SELECT 1 FROM information_schema.tables WHERE table_schema = 'images' AND table_name = ? LIMIT 1`;
+        const tableExistsQuery = `SELECT 1 FROM information_schema.tables WHERE table_schema = 'defaultdb' AND table_name = ? LIMIT 1`;
         const tableExists = await queryAsync(tableExistsQuery, [category]);
 
         if (tableExists.length === 0) {
@@ -87,8 +82,13 @@ app.post('/upload', upload.single('image'), async (req, res) => {
         // Insert the image into the dynamically determined table
         const insertQuery = `INSERT INTO ${category} (product_name, content, price, image) VALUES (?, ?, ?, ?)`;
         await queryAsync(insertQuery, [product_name, content, price, imageBuffer]);
-        images
+        
         console.log('Image uploaded and stored in the database'); 
+        res.status(200).json({ message: 'Image uploaded successfully!' });
+    } catch (error) {
+        console.error('Error uploading image:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
 });
 
 // Helper function to promisify database queries
@@ -101,22 +101,24 @@ function queryAsync(sql, args) {
     });
 }
 
-
-
 app.get('/getAll', async (req, res) => {
-    db.query('SELECT * FROM mobile', async (error, result, fields) => {
-        if (error) {
-            console.error('Error fetching data:', error);
-            res.status(500).json({ error: 'Internal server error' });
-        } else {
-            const formattedResult = result.map(item => ({
-                ...item,
-                image: bufferToBase64(item.image)
-            }));
-            //console.log('Formatted Result:');
-            res.json(formattedResult);
-        }
-    });
+    try {
+        db.query('SELECT * FROM mobile', async (error, result, fields) => {
+            if (error) {
+                console.error('Error fetching data:', error);
+                res.status(500).json({ error: 'Internal server error' });
+            } else {
+                const formattedResult = result.map(item => ({
+                    ...item,
+                    image: bufferToBase64(item.image)
+                }));
+                res.json(formattedResult);
+            }
+        });
+    } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
 });
 
 const bufferToBase64 = (buffer) => {
@@ -147,22 +149,24 @@ app.get('/image/:id', (req, res) => {
 
 //GET ALL IQOO PHONE IMAGES 
 app.get('/getAl', async (req, res) => {
-    db.query('SELECT * FROM mobileiqoo', async (error, result, fields) => {
-        if (error) {
-            console.error('Error fetching data:', error);
-            res.status(500).json({ error: 'Internal server error' });
-        } else {
-            const formattedResult = result.map(item => ({
-                ...item,
-                image: bufferToBase64(item.image)
-            }));
-            //console.log('Formatted Result:');
-            res.json(formattedResult);
-        }
-    });
+    try {
+        db.query('SELECT * FROM mobileiqoo', async (error, result, fields) => {
+            if (error) {
+                console.error('Error fetching data:', error);
+                res.status(500).json({ error: 'Internal server error' });
+            } else {
+                const formattedResult = result.map(item => ({
+                    ...item,
+                    image: bufferToBase64(item.image)
+                }));
+                res.json(formattedResult);
+            }
+        });
+    } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
 });
-
-
 
 app.get('/iqoo/:id', (req, res) => {
     const imageId = req.params.id;
@@ -185,20 +189,6 @@ app.get('/iqoo/:id', (req, res) => {
         res.end(imageBuffer);
     });
 });
-
-// app.delete('/delete/:id',(req,res)=>{
-
-//     const {id}=req.params;
-
-//     db.query('delete from mobile where id=?',[id],(error,result,field)=>{
-//         if(error){
-//             res.send("Error Deleting");
-//         }else{
-//             res.send("Delete Success");
-//         }
-//     })
-    
-// })
 
 app.listen(port, () => {
     console.log(`Server is running on port ${port}`);
